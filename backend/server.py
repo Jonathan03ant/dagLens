@@ -26,10 +26,10 @@ def health():
 
 def run_llc(ir_code: str, stage: str):
     """
-    Generates graph .dot file from LLVM IR
-    llc path: user configured, or in PATH (TODO)
-    -march: default amdgcn, later user defined (TODO)
-    -mcpu: default gfx1101, later user defined (TODO)
+        Generates graph .dot file from LLVM IR
+        llc path: user configured, or in PATH (TODO)
+        -march: default amdgcn, later user defined (TODO)
+        -mcpu: default gfx1101, later user defined (TODO)
     """
 
     with open('/tmp/input.ll', 'w') as f:
@@ -54,6 +54,51 @@ def run_llc(ir_code: str, stage: str):
     dot_file = dot_files[0]
 
     return dot_file
+
+def parse_dot(dot_file_path: str):
+    """
+        # Opens the .dot file
+        # Parses the GraphViz DOT syntax
+        # Extracts:
+        #   - Nodes: {id, label (opcode), type, etc.}
+        #   - Edges: {source, target, type}
+    # Returns: JSON structure for React Flow
+    """
+    nodes = []
+    edges = []
+
+    with open(dot_file_path, "r") as f:
+        for line in f:
+            if '[shape=record' in line:
+                # This is a node definition
+                node_id = line.split()[0]                               # Node0x5bea79575b90
+                label = extract_label(line)                             # label="{EntryToken|t0|{<d0>ch|<d1>glue}}"];
+                opcode, node_num, output_type = parse_label(label)
+                nodes.append({
+                    "id": node_id,
+                    "data": {
+                        "label": opcode,
+                        "opcode": opcode,
+                        "node_num": node_num,
+                        "output_type": output_type
+                    }
+                })
+            elif '->' in line:
+                # This is an edge
+                parts = line.split('->')
+                source = parts[0].split(':')[0].strip()                 # "Node0x5bea79575b90"
+                target = parts[1].split(':')[0].strip()                 # "Node0x5bea7969a410"
+
+                is_chain = 'color=blue' in line
+
+                edges.append({
+                    "id": f"{source}->{target}",
+                    "source": source,
+                    "target": target,
+                    "type": "chain" if is_chain else "data"
+                })
+
+    return {"nodes": nodes, "edges": edges}
 
 if __name__ == '__main__':
     print('DagLens server starting on http://localhost:8080')
