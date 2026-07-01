@@ -55,6 +55,40 @@ def run_llc(ir_code: str, stage: str):
 
     return dot_file
 
+def extract_label(line: str):
+    """
+    Extract the label content from a node definition line.
+    Input:  'Node0x5bea79575b90 [shape=record,shape=Mrecord,label="{EntryToken|t0|{<d0>ch|<d1>glue}}"];'
+    Output: '{EntryToken|t0|{<d0>ch|<d1>glue}}'
+    """
+    match = re.search(r'label="([^"]+)"', line)
+    if match:
+        return match.group(1)
+    return ""
+
+def parse_label(label: str):
+    """
+    Parse the label to extract opcode, node number, and output type.
+    Examples:
+    "{EntryToken|t0|{<d0>ch|<d1>glue}}" → ("EntryToken", "t0", "ch")
+    "{Register %8|t1|{<d0>i32}}" → ("Register %8", "t1", "i32")
+    "{{<s0>0|<s1>1}|add|t6|{<d0>i32}}" → ("add", "t6", "i32")
+    """
+    # Pattern 1: Simple node {Opcode|tN|{outputs}}
+    # Example: {EntryToken|t0|{<d0>ch|<d1>glue}}
+    match = re.match(r'\{([^{|]+)\|t(\d+)\|.*?<d\d+>([^}|]+)', label)
+    if match:
+        return (match.group(1), f"t{match.group(2)}", match.group(3))
+
+    # Pattern 2: Node with inputs {{inputs}|Opcode|tN|{outputs}}
+    # Example: {{<s0>0|<s1>1}|add|t6|{<d0>i32}}
+    match = re.match(r'\{\{.*?\}\|([^|]+)\|t(\d+)\|.*?<d\d+>([^}|]+)', label)
+    if match:
+        return (match.group(1), f"t{match.group(2)}", match.group(3))
+
+    # Fallback: return label as-is
+    return (label, "t?", "?")
+
 def parse_dot(dot_file_path: str):
     """
         # Opens the .dot file
