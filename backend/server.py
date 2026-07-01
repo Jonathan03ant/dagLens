@@ -1,9 +1,8 @@
 import os
 import subprocess
-import tempfile
 import glob
 import re
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 app = Flask(__name__)
@@ -24,6 +23,32 @@ def health():
         'message': 'DagLens Python API is running'
     })
 
+@app.route('/api/compile', methods=['POST'])
+def compile_endpoint():
+    """
+    Receives LLVM IR code and DAG stage, compiles and returns graph data.
+    """
+    try:
+        data = request.get_json()
+        ir_code = data.get('ir_code', '')
+        stage = data.get('stage', 'isel')
+
+        # Validate inputs
+        if not ir_code:
+            return jsonify({'error': 'No IR code provided'}), 400
+        if stage not in DAG_STAGE_FLAGS:
+              return jsonify({'error': f'Invalid stage: {stage}'}), 400
+
+        dot_file_path = run_llc(ir_code, stage)
+        graph_data = parse_dot(dot_file_path)
+
+        return jsonify(graph_data)
+
+    except subprocess.CalledProcessError as e:
+        return jsonify({'error': f'llc compilation failed: {str(e)}'}), 500
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
 def run_llc(ir_code: str, stage: str):
     """
         Generates graph .dot file from LLVM IR
@@ -35,7 +60,7 @@ def run_llc(ir_code: str, stage: str):
     with open('/tmp/input.ll', 'w') as f:
         f.write(ir_code)
 
-    llc_path = "llc"
+    llc_path = "/utg/TheRockDogFooding/TheRock/compiler/amd-llvm/build-debug/bin/llc"
     flag = DAG_STAGE_FLAGS[stage]
 
     cmd = [
@@ -110,6 +135,7 @@ def parse_dot(dot_file_path: str):
                 opcode, node_num, output_type = parse_label(label)
                 nodes.append({
                     "id": node_id,
+                    "position": {"x": 0, "y": 0},
                     "data": {
                         "label": opcode,
                         "opcode": opcode,
