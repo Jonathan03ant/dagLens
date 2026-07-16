@@ -1,7 +1,8 @@
 import { CustomSelect } from './CustomSelect'
 
-interface StatusBarProps {
+interface FooterProps {
   llcPath: string
+  onLlcPathChange: (path: string) => void
   arch: string
   cpu: string
   stage: string
@@ -21,7 +22,7 @@ const DAG_STAGES = [
 const ARCH_OPTIONS = [{ value: 'amdgcn', label: 'amdgcn' }]
 const CPU_OPTIONS = [{ value: 'gfx1101', label: 'gfx1101' }]
 
-export function StatusBar({ llcPath, arch, cpu, stage, onStageChange, onRun, isLoading }: StatusBarProps) {
+export function Footer({ llcPath, onLlcPathChange, arch, cpu, stage, onStageChange, onRun, isLoading }: FooterProps) {
   return (
     <div
       className="bg-[#000000] border-t border-[#1a1a1a] px-6 py-2 flex items-center justify-between"
@@ -34,8 +35,9 @@ export function StatusBar({ llcPath, arch, cpu, stage, onStageChange, onRun, isL
           <input
             type="text"
             value={llcPath}
-            readOnly
-            className="bg-[#000000] text-[#18a018] border border-[#1a1a1a] px-2 py-1 rounded text-xs"
+            onChange={(e) => onLlcPathChange(e.target.value)}
+            placeholder="/path/to/llc"
+            className="bg-[#000000] text-[#18a018] border border-[#1a1a1a] px-2 py-1 rounded text-xs hover:border-[#18a018] focus:border-[#18a018] focus:outline-none"
             style={{ fontFamily: 'JetBrains Mono, monospace', width: '350px' }}
           />
         </div>
