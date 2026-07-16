@@ -2,6 +2,8 @@ import os
 import subprocess
 import glob
 import re
+import signal
+import time
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
@@ -32,6 +34,7 @@ def compile_endpoint():
         data = request.get_json()
         ir_code = data.get('ir_code', '')
         stage = data.get('stage', 'isel')
+        llc_path = data.get('llc_path', 'llc')  # Default to 'llc' in PATH
 
         # Validate inputs
         if not ir_code:
@@ -39,7 +42,7 @@ def compile_endpoint():
         if stage not in DAG_STAGE_FLAGS:
               return jsonify({'error': f'Invalid stage: {stage}'}), 400
 
-        dot_file_path = run_llc(ir_code, stage)
+        dot_file_path = run_llc(ir_code, stage, llc_path)
         graph_data = parse_dot(dot_file_path)
 
         return jsonify(graph_data)
@@ -49,10 +52,10 @@ def compile_endpoint():
     except Exception as e:
         return jsonify({'error': f'Server error: {str(e)}'}), 500
 
-def run_llc(ir_code: str, stage: str):
+def run_llc(ir_code: str, stage: str, llc_path: str):
     """
         Generates graph .dot file from LLVM IR
-        llc path: user configured, or in PATH (TODO)
+        llc_path: user provides path via UI
         -march: default amdgcn, later user defined (TODO)
         -mcpu: default gfx1101, later user defined (TODO)
     """
@@ -60,11 +63,10 @@ def run_llc(ir_code: str, stage: str):
     with open('/tmp/input.ll', 'w') as f:
         f.write(ir_code)
 
-    llc_path = "/utg/TheRockDogFooding/TheRock/compiler/amd-llvm/build-debug/bin/llc"
     flag = DAG_STAGE_FLAGS[stage]
 
     cmd = [
-        llc_path,
+        llc_path,             # User-provided llc path
         '-march=amdgcn',      # TODO: make configurable
         '-mcpu=gfx1101',      # TODO: make configurable
         '/tmp/input.ll',
@@ -145,21 +147,60 @@ def parse_dot(dot_file_path: str):
                 })
             elif '->' in line:
                 # This is an edge
+                # DOT format: "targetNode:inputPort -> sourceNode:outputPort"
+                # Arrow points from consumer to producer, so we need to SWAP!
                 parts = line.split('->')
-                source = parts[0].split(':')[0].strip()                 # "Node0x5bea79575b90"
-                target = parts[1].split(':')[0].strip()                 # "Node0x5bea7969a410"
+                target = parts[0].split(':')[0].strip()   # Left side is actually target
+                source = parts[1].split(':')[0].strip()   # Right side is actually source
 
-                is_chain = 'color=blue' in line
+                # Determine edge type from color
+                is_chain = 'color=blue' in line    # Chain edges (ordering)
+                is_glue = 'color=red' in line      # Glue edges (special dependencies)
+
+                edge_type = "glue" if is_glue else ("chain" if is_chain else "data")
 
                 edges.append({
                     "id": f"{source}->{target}",
                     "source": source,
                     "target": target,
-                    "type": "chain" if is_chain else "data"
+                    "type": edge_type
                 })
 
     return {"nodes": nodes, "edges": edges}
 
+def kill_port_8080():
+    """Kill any process using port 8080"""
+    try:
+        # Find process using port 8080
+        result = subprocess.run(
+            ['lsof', '-ti', ':8080'],
+            capture_output=True,
+            text=True
+        )
+
+        if result.stdout.strip():
+            pids = result.stdout.strip().split('\n')
+            for pid in pids:
+                try:
+                    print(f'Killing existing process on port 8080 (PID: {pid})')
+                    os.kill(int(pid), signal.SIGKILL)  # Force kill immediately
+                except ProcessLookupError:
+                    pass  # Process already dead
+
+            # Wait a moment for port to free up
+            time.sleep(0.5)
+    except FileNotFoundError:
+        # lsof not available, try fuser with SIGKILL
+        try:
+            subprocess.run(['fuser', '-k', '-9', '8080/tcp'], stderr=subprocess.DEVNULL)
+            print('Killed existing process on port 8080')
+            time.sleep(0.5)
+        except FileNotFoundError:
+            pass  # Neither lsof nor fuser available
+
 if __name__ == '__main__':
+    # Only kill port on initial startup, not on Flask reloader restart
+    if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+        kill_port_8080()
     print('DagLens server starting on http://localhost:8080')
     app.run(host='0.0.0.0', port=8080, debug=True)
