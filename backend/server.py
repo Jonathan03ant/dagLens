@@ -4,6 +4,7 @@ import glob
 import re
 import signal
 import time
+import datetime
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
@@ -42,14 +43,21 @@ def compile_endpoint():
         if stage not in DAG_STAGE_FLAGS:
               return jsonify({'error': f'Invalid stage: {stage}'}), 400
 
-        dot_file_path = run_llc(ir_code, stage, llc_path)
+        dot_file_path, terminal_output = run_llc(ir_code, stage, llc_path)
         graph_data = parse_dot(dot_file_path)
 
-        return jsonify(graph_data)
+        return jsonify({
+            **graph_data,
+            "terminal_output": terminal_output
+        })
 
     except subprocess.CalledProcessError as e:
+        import traceback
+        traceback.print_exc()  # Print full error to console
         return jsonify({'error': f'llc compilation failed: {str(e)}'}), 500
     except Exception as e:
+        import traceback
+        traceback.print_exc()  # Print full error to console
         return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 def run_llc(ir_code: str, stage: str, llc_path: str):
@@ -74,13 +82,49 @@ def run_llc(ir_code: str, stage: str, llc_path: str):
         '-o', '/dev/null'  # Don't generate assembly, just .dot
     ]
 
-    subprocess.run(cmd, check=True)
+    result = subprocess.run(
+        cmd,
+        check=True,
+        capture_output=True,
+        text=True
+    )
+
+    terminal_output = []
+    timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+    terminal_output.append({
+        "type": "command",
+        "text": " ".join(cmd),
+        "timestamp": timestamp
+    })
+
+    if result.stdout.strip():
+        for line in result.stdout.strip().split('\n'):
+            terminal_output.append({
+                "type": "stdout",
+                "text": line,
+                "timestamp": timestamp
+            })
+
+    if result.stderr.strip():
+        for line in result.stderr.strip().split('\n'):
+            terminal_output.append({
+                "type": "stderr",
+                "text": line,
+                "timestamp": timestamp
+            })
+
+    terminal_output.append({
+        "type": "success",
+        "text": f"✓ Compiled successfully (exit code: {result.returncode})",
+        "timestamp": timestamp
+    })
+
 
     dot_files = glob.glob('/tmp/dag.*.dot')
     dot_files.sort(key=os.path.getmtime, reverse=True)
     dot_file = dot_files[0]
 
-    return dot_file
+    return dot_file, terminal_output
 
 def extract_label(line: str):
     """
