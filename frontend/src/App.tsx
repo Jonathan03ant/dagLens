@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Header, InputPanel, StatusBar } from './components/common'
+import { Header, InputPanel, Footer } from './components/common'
+import type { TerminalLine } from './components/common'
 import { SelectionDAGViewer } from './components/tools'
 import './App.css'
 
@@ -10,6 +11,7 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [irCode, setIrCode] = useState('')
   const [stage, setStage] = useState('isel')
+  const [terminalOutput, setTerminalOutput] = useState<TerminalLine[]>([])
 
   // Settings - user editable llc path
   const [llcPath, setLlcPath] = useState('/path/to/llc')
@@ -24,6 +26,14 @@ function App() {
 
     setLoading(true)
 
+    // Clear previous output and show command
+    const timestamp = new Date().toLocaleTimeString()
+    setTerminalOutput([{
+      type: 'command',
+      text: `llc -march=${arch} -mcpu=${cpu} -view-${stage}-dags input.ll`,
+      timestamp
+    }])
+
     try {
       const response = await fetch('/api/compile', {
         method: 'POST',
@@ -31,16 +41,26 @@ function App() {
         body: JSON.stringify({
           ir_code: irCode,
           stage: stage,
-          llc_path: llcPath
+          llc_path: llcPath.trim()
         })
       })
 
       const data = await response.json()
+
+      // Update terminal output with backend response
+      if (data.terminal_output) {
+        setTerminalOutput(data.terminal_output)
+      }
+
       setNodes(data.nodes || [])
       setEdges(data.edges || [])
     } catch (error) {
       console.error('Compile error:', error)
-      alert('Failed to compile. Check console.')
+      setTerminalOutput(prev => [...prev, {
+        type: 'error',
+        text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: new Date().toLocaleTimeString()
+      }])
     } finally {
       setLoading(false)
     }
@@ -60,7 +80,12 @@ function App() {
           backgroundColor: '#0a0a0a',
           overflow: 'auto'
         }}>
-          <InputPanel value={irCode} onChange={setIrCode} />
+          <InputPanel
+            value={irCode}
+            onChange={setIrCode}
+            terminalOutput={terminalOutput}
+            isRunning={loading}
+          />
         </div>
 
         {/* Right Panel - Graph (60%) */}
@@ -81,8 +106,8 @@ function App() {
         </div>
       </div>
 
-      {/* Status Bar at Bottom */}
-      <StatusBar
+      {/* Footer */}
+      <Footer
         llcPath={llcPath}
         onLlcPathChange={setLlcPath}
         arch={arch}
