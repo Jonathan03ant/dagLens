@@ -1,0 +1,70 @@
+import { CustomSelect } from './CustomSelect'
+
+interface StatusBarProps {
+  llcPath: string
+  arch: string
+  cpu: string
+  stage: string
+  onStageChange: (stage: string) => void
+  onRun: () => void
+  isLoading: boolean
+}
+
+const DAG_STAGES = [
+  { value: 'dag-combine1', label: 'dag-combine1' },
+  { value: 'legalize', label: 'legalize' },
+  { value: 'dag-combine2', label: 'dag-combine2' },
+  { value: 'isel', label: 'isel' },
+  { value: 'sched', label: 'sched' },
+]
+
+const ARCH_OPTIONS = [{ value: 'amdgcn', label: 'amdgcn' }]
+const CPU_OPTIONS = [{ value: 'gfx1101', label: 'gfx1101' }]
+
+export function StatusBar({ llcPath, arch, cpu, stage, onStageChange, onRun, isLoading }: StatusBarProps) {
+  return (
+    <div
+      className="bg-[#000000] border-t border-[#1a1a1a] px-6 py-2 flex items-center justify-between"
+      style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px' }}
+    >
+      {/* Left side - Settings display */}
+      <div className="flex items-center gap-4 text-[#c8c8c8]">
+        <div className="flex items-center gap-2">
+          <span className="text-[#909090]">llc:</span>
+          <input
+            type="text"
+            value={llcPath}
+            readOnly
+            className="bg-[#000000] text-[#18a018] border border-[#1a1a1a] px-2 py-1 rounded text-xs"
+            style={{ fontFamily: 'JetBrains Mono, monospace', width: '350px' }}
+          />
+        </div>
+        <div className="w-px h-4 bg-[#1a1a1a]"></div>
+        <div className="flex items-center gap-2">
+          <span className="text-[#909090]">Arch:</span>
+          <CustomSelect value={arch} options={ARCH_OPTIONS} onChange={() => {}} disabled />
+        </div>
+        <div className="w-px h-4 bg-[#1a1a1a]"></div>
+        <div className="flex items-center gap-2">
+          <span className="text-[#909090]">CPU:</span>
+          <CustomSelect value={cpu} options={CPU_OPTIONS} onChange={() => {}} disabled />
+        </div>
+        <div className="w-px h-4 bg-[#1a1a1a]"></div>
+        <div className="flex items-center gap-2">
+          <span className="text-[#909090]">Stage:</span>
+          <CustomSelect value={stage} options={DAG_STAGES} onChange={onStageChange} />
+        </div>
+      </div>
+
+      {/* Right side - Run button */}
+      <button
+        onClick={onRun}
+        disabled={isLoading}
+        className="px-6 py-1.5 text-[#18a018] font-bold text-sm hover:text-[#20c020] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{ fontFamily: 'JetBrains Mono, monospace' }}
+      >
+        {isLoading ? '⏳ Running...' : '▶ RUN'}
+      </button>
+    </div>
+  )
+}
