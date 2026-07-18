@@ -8,6 +8,7 @@ from flask_cors import CORS
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from lib.compiler import run_llc, DAG_STAGE_FLAGS
 from lib.parser import parse_dot
+from lib.targets import get_architectures, get_cpus
 from lib.utils import kill_port_8080
 
 app = Flask(__name__)
@@ -62,6 +63,22 @@ def compile_endpoint():
             {"type": "error", "text": f"✗ Error: {str(e)}", "timestamp": timestamp}
         ]
         return jsonify({'error': f'Server error: {str(e)}', 'terminal_output': terminal_output}), 500
+
+@app.route('/api/targets', methods=['GET'])
+def get_targets():
+    llc_path = request.args.get('llc_path')
+    arch = request.args.get('arch')
+
+    if not llc_path:
+        return jsonify({'error': 'llc_path required'}), 400
+
+    result = {}
+
+    result["architectures"] = get_architectures(llc_path)
+    if arch:
+        result["cpus"] = get_cpus(llc_path, arch)
+
+    return jsonify(result)
 
 if __name__ == '__main__':
     # Only kill port on initial startup, not on Flask reloader restart
