@@ -71,10 +71,10 @@ export function CodeEditor({ value, onChange }: CodeEditorProps) {
             fontFamily: 'JetBrains Mono, monospace',
             fontSize: '13px',
             lineHeight: '1.6',
-            padding: '20px 12px 20px 20px',
+            padding: '20px 6px',
             textAlign: 'right',
             borderRight: '1px solid #1a1a1a',
-            minWidth: '50px',
+            minWidth: '32px',
           }}
         >
           <div className="line-number">1</div>

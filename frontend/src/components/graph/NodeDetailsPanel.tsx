@@ -61,7 +61,7 @@ export function NodeDetailsPanel({
           {node.data.opcode}
         </h3>
         <p style={{ color: '#888', margin: 0, fontSize: '12px', fontFamily: 'JetBrains Mono, monospace' }}>
-          {node.data.node_num} | {node.data.output_type}
+          {node.data.node_num} | {Array.isArray(node.data.output_types) ? node.data.output_types.join(', ') : node.data.output_types}
         </p>
       </div>
 
@@ -75,13 +75,18 @@ export function NodeDetailsPanel({
         ) : (
           inputs.map((edge, i) => {
             const sourceNode = allNodes.find((n) => n.id === edge.source)
+            // Get output types (array) from source node
+            const outputTypes = sourceNode?.data.output_types || ['?']
+            const inputType = Array.isArray(outputTypes) ? outputTypes[0] : outputTypes
             const borderColor = EDGE_COLORS[edge.type as keyof typeof EDGE_COLORS] || EDGE_COLORS.data
             return (
               <div key={i} style={{ marginBottom: '8px', paddingLeft: '10px', borderLeft: `3px solid ${borderColor}` }}>
                 <div style={{ fontSize: '11px', fontFamily: 'JetBrains Mono, monospace' }}>
                   ← {sourceNode?.data.opcode} ({sourceNode?.data.node_num})
                 </div>
-                <div style={{ fontSize: '10px', color: '#666' }}>[{edge.type}]</div>
+                <div style={{ fontSize: '10px', color: '#888' }}>
+                  <span style={{ color: '#18a018' }}>{inputType}</span> [{edge.type}]
+                </div>
               </div>
             )
           })

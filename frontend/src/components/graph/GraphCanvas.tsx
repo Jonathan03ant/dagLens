@@ -32,29 +32,53 @@ export function GraphCanvas({ nodes, edges, onNodeClick, onEdgeClick, onPaneClic
     }
   }, [nodes, edges, setNodes, setEdges])
 
-  if (nodes.length === 0) {
-    return (
-      <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
-        <h2>DAG Viewer</h2>
-        <p>Compile LLVM IR to see the SelectionDAG graph here</p>
-      </div>
-    )
-  }
-
   return (
-    <ReactFlow
-      key={`${nodes.length}-${edges.length}`}
-      nodes={nodesState}
-      edges={edgesState}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onNodeClick={onNodeClick}
-      onEdgeClick={onEdgeClick}
-      onPaneClick={onPaneClick}
-      fitView
-    >
-      <Background color="#18a018" gap={16} size={1} style={{ backgroundColor: '#0a0a0a' }} />
-      <Controls />
-    </ReactFlow>
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      {/* Empty state overlay - rendered ABOVE ReactFlow */}
+      {nodes.length === 0 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            textAlign: 'center',
+            pointerEvents: 'none',
+            fontFamily: 'JetBrains Mono, monospace',
+            zIndex: 10,
+            animation: 'pulse 6s ease-in-out infinite',
+          }}
+        >
+          <div style={{ fontSize: '48px', fontWeight: '300', marginBottom: '8px', color: '#18a018' }}>
+            Graph Viewer
+          </div>
+          <div style={{ fontSize: '14px', color: '#0d5d0d' }}>
+            Compile IR to visualize SelectionDAG
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 0.6; }
+        }
+      `}</style>
+
+      <ReactFlow
+        key={`${nodes.length}-${edges.length}`}
+        nodes={nodesState}
+        edges={edgesState}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onNodeClick={onNodeClick}
+        onEdgeClick={onEdgeClick}
+        onPaneClick={onPaneClick}
+        fitView={nodes.length > 0}
+      >
+        <Background color="#18a018" gap={16} size={1} style={{ backgroundColor: '#0a0a0a' }} />
+        <Controls />
+      </ReactFlow>
+    </div>
   )
 }
