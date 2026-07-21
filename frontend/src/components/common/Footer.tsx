@@ -3,8 +3,12 @@ import { CustomSelect } from './CustomSelect'
 interface FooterProps {
   llcPath: string
   onLlcPathChange: (path: string) => void
+  architectures: Array<{name: string, description: string}>
   arch: string
+  onArchChange: (arch: string) => void
+  cpus: Array<{name: string, description: string}>
   cpu: string
+  onCpuChange: (cpu: string) => void
   stage: string
   onStageChange: (stage: string) => void
   onRun: () => void
@@ -19,10 +23,22 @@ const DAG_STAGES = [
   { value: 'sched', label: 'sched' },
 ]
 
-const ARCH_OPTIONS = [{ value: 'amdgcn', label: 'amdgcn' }]
-const CPU_OPTIONS = [{ value: 'gfx1101', label: 'gfx1101' }]
-
-export function Footer({ llcPath, onLlcPathChange, arch, cpu, stage, onStageChange, onRun, isLoading }: FooterProps) {
+export function Footer({
+  llcPath,
+  onLlcPathChange,
+  architectures,
+  arch,
+  onArchChange,
+  cpus,
+  cpu,
+  onCpuChange,
+  stage,
+  onStageChange,
+  onRun,
+  isLoading
+}: FooterProps) {
+  const archOptions = architectures.map(a => ({ value: a.name, label: a.name }))
+  const cpuOptions = cpus.map(c => ({ value: c.name, label: c.name }))
   return (
     <div
       className="bg-[#000000] border-t border-[#1a1a1a] px-6 py-2 flex items-center justify-between"
@@ -44,12 +60,22 @@ export function Footer({ llcPath, onLlcPathChange, arch, cpu, stage, onStageChan
         <div className="w-px h-4 bg-[#1a1a1a]"></div>
         <div className="flex items-center gap-2">
           <span className="text-[#909090]">Arch:</span>
-          <CustomSelect value={arch} options={ARCH_OPTIONS} onChange={() => {}} disabled />
+          <CustomSelect
+            value={arch}
+            options={archOptions.length > 0 ? archOptions : [{ value: arch, label: arch }]}
+            onChange={onArchChange}
+            disabled={archOptions.length === 0}
+          />
         </div>
         <div className="w-px h-4 bg-[#1a1a1a]"></div>
         <div className="flex items-center gap-2">
-          <span className="text-[#909090]">CPU:</span>
-          <CustomSelect value={cpu} options={CPU_OPTIONS} onChange={() => {}} disabled />
+          <span className="text-[#909090]">GPU:</span>
+          <CustomSelect
+            value={cpu}
+            options={cpuOptions.length > 0 ? cpuOptions : [{ value: cpu, label: cpu }]}
+            onChange={onCpuChange}
+            disabled={cpuOptions.length === 0}
+          />
         </div>
         <div className="w-px h-4 bg-[#1a1a1a]"></div>
         <div className="flex items-center gap-2">

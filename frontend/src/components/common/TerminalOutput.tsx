@@ -17,6 +17,14 @@ export function TerminalOutput({ output, isRunning }: TerminalOutputProps) {
   const [isDragging, setIsDragging] = useState(false)
   const startYRef = useRef(0)
   const startHeightRef = useRef(0)
+  const terminalRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll to bottom when output changes
+  useEffect(() => {
+    if (terminalRef.current && output.length > 0) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight
+    }
+  }, [output])
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -97,6 +105,7 @@ export function TerminalOutput({ output, isRunning }: TerminalOutputProps) {
 
       {isExpanded && (
         <div
+          ref={terminalRef}
           className="bg-[#000000] px-2 py-1.5 overflow-y-auto text-left"
           style={{
             fontFamily: 'JetBrains Mono, monospace',
@@ -109,7 +118,7 @@ export function TerminalOutput({ output, isRunning }: TerminalOutputProps) {
             <div className="text-[#505050]">No output yet. Click RUN to compile.</div>
           ) : (
             output.map((line, idx) => (
-              <div key={idx} className={getLineColor(line.type)} style={{ whiteSpace: 'pre' }}>
+              <div key={idx} className={getLineColor(line.type)} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
                 {line.type === 'command' && '$ '}
                 {line.text}
               </div>
