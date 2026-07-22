@@ -12,26 +12,22 @@ DAG_STAGE_FLAGS = {
 }
 
 
-def run_llc(ir_code: str, stage: str, llc_path: str):
+def run_llc(ir_code: str, stage: str, llc_path: str, arch: str = 'amdgcn', mcpu: str = 'gfx1101'):
     """
-        Generates graph .dot file from LLVM IR
-        llc_path: user provides path via UI
-        -march: default amdgcn, later user defined (TODO)
-        -mcpu: default gfx1101, later user defined (TODO)
+    Generates graph .dot file from LLVM IR
     """
-
     with open('/tmp/input.ll', 'w') as f:
         f.write(ir_code)
 
     flag = DAG_STAGE_FLAGS[stage]
 
     cmd = [
-        llc_path,             # User-provided llc path
-        '-march=amdgcn',      # machine architecture (from llc)
-        '-mcpu=gfx1101',      # chip's available (from llc)
+        llc_path,
+        f'-march={arch}',
+        f'-mcpu={mcpu}',
         '/tmp/input.ll',
         flag,
-        '-o', '/dev/null'     # Don't generate assembly, just .dot
+        '-o', '/dev/null'
     ]
 
     result = subprocess.run(
@@ -67,3 +63,62 @@ def run_llc(ir_code: str, stage: str, llc_path: str):
     dot_file = dot_files[0]
 
     return dot_file, terminal_output
+
+
+def generate_mir(ir_code: str, llc_path: str, arch: str, mcpu: str):
+    """
+    Generates Machine IR (MIR) output from LLVM IR.
+    Shows machine instructions with virtual registers (before register allocation).
+    """
+    with open('/tmp/input.ll', 'w') as f:
+        f.write(ir_code)
+
+    output_mir = '/tmp/output.mir'
+
+    cmd = [
+        llc_path,
+        f'-march={arch}',
+        f'-mcpu={mcpu}',
+        '/tmp/input.ll',
+        '-stop-after=finalize-isel',
+        '-o', output_mir
+    ]
+
+    result = subprocess.run(
+        cmd,
+        check=True,
+        capture_output=True,
+        text=True
+    )
+
+    # Read generated MIR content
+    with open(output_mir, 'r') as f:
+        mir_content = f.read()
+
+    # Build terminal output
+    terminal_output = []
+    timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+
+    terminal_output.append({
+        "type": "command",
+        "text": " ".join(cmd),
+        "timestamp": timestamp
+    })
+
+    if result.stdout.strip():
+        for line in result.stdout.strip().split('\n'):
+            terminal_output.append({
+                "type": "stdout",
+                "text": line,
+                "timestamp": timestamp
+            })
+
+    terminal_output.append({
+        "type": "success",
+        "text": f"✓ MIR generated successfully ({len(mir_content)} bytes)",
+        "timestamp": timestamp
+    })
+
+    return mir_content, terminal_output
+
+
