@@ -27,8 +27,8 @@ def run_llc(ir_code: str, stage: str, llc_path: str):
 
     cmd = [
         llc_path,             # User-provided llc path
-        '-march=amdgcn',      # TODO: make configurable
-        '-mcpu=gfx1101',      # TODO: make configurable
+        '-march=amdgcn',      # machine architecture (from llc)
+        '-mcpu=gfx1101',      # chip's available (from llc)
         '/tmp/input.ll',
         flag,
         '-o', '/dev/null'     # Don't generate assembly, just .dot

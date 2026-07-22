@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from lib.compiler import run_llc, DAG_STAGE_FLAGS
 from lib.parser import parse_dot
 from lib.targets import get_architectures, get_cpus
-from lib.utils import kill_port_8080
+from lib.utils import kill_port_8080, generate_comparison
 
 app = Flask(__name__)
 CORS(app)
@@ -25,26 +25,55 @@ def health():
 def compile_endpoint():
     """
     Receives LLVM IR code and DAG stage, compiles and returns graph data.
+    Optionally accepts compare_stage to compare two DAG stages.
     """
     try:
         data = request.get_json()
         ir_code = data.get('ir_code', '')
         stage = data.get('stage', 'isel')
+        compare_stage = data.get('compare_stage', None)
         llc_path = data.get('llc_path', 'llc')
 
         # Validate inputs
         if not ir_code:
             return jsonify({'error': 'No IR code provided'}), 400
         if stage not in DAG_STAGE_FLAGS:
-              return jsonify({'error': f'Invalid stage: {stage}'}), 400
+            return jsonify({'error': f'Invalid stage: {stage}'}), 400
+        if compare_stage and compare_stage not in DAG_STAGE_FLAGS:
+            return jsonify({'error': f'Invalid compare_stage: {compare_stage}'}), 400
 
+        # Compile primary stage
         dot_file_path, terminal_output = run_llc(ir_code, stage, llc_path)
         graph_data = parse_dot(dot_file_path)
 
-        return jsonify({
+        response = {
             **graph_data,
             "terminal_output": terminal_output
-        })
+        }
+
+        # If compare_stage is provided, compile it and generate comparison
+        if compare_stage:
+            compare_dot_path, compare_terminal = run_llc(ir_code, compare_stage, llc_path)
+            compare_graph_data = parse_dot(compare_dot_path)
+
+            # Generate comparison between the two stages
+            comparison = generate_comparison(
+                nodes1=graph_data['nodes'],
+                edges1=graph_data['edges'],
+                stage1_name=stage,
+                nodes2=compare_graph_data['nodes'],
+                edges2=compare_graph_data['edges'],
+                stage2_name=compare_stage
+            )
+
+            # Add comparison data to response
+            response['compare_nodes'] = compare_graph_data['nodes']
+            response['compare_edges'] = compare_graph_data['edges']
+            response['comparison'] = comparison
+            # Append compare terminal output
+            response['terminal_output'].extend(compare_terminal)
+
+        return jsonify(response)
 
     except subprocess.CalledProcessError as e:
         import traceback
