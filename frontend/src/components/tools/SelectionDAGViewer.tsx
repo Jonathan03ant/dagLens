@@ -5,26 +5,58 @@ interface SelectionDAGViewerProps {
   nodes: any[]
   edges: any[]
   stage?: string
+  compareNodes?: any[]
+  compareEdges?: any[]
+  comparison?: any
 }
 
 /**
  * SelectionDAG visualization tool
  * Orchestrates graph layout, rendering, and interaction
  */
-export function SelectionDAGViewer({ nodes, edges, stage = 'isel' }: SelectionDAGViewerProps) {
+export function SelectionDAGViewer({
+  nodes,
+  edges,
+  stage = 'isel',
+  compareNodes = [],
+  compareEdges = [],
+  comparison = null
+}: SelectionDAGViewerProps) {
+  // Check if we're in compare mode
+  const isCompareMode = compareNodes.length > 0 && compareEdges.length > 0 && comparison
+
+  // Primary stage state
   const [layoutedNodes, setLayoutedNodes] = useState<any[]>([])
   const [layoutedEdges, setLayoutedEdges] = useState<any[]>([])
   const [allNodes, setAllNodes] = useState<any[]>([])
   const [allEdges, setAllEdges] = useState<any[]>([])
+
+  // Compare stage state
+  const [compareLayoutedNodes, setCompareLayoutedNodes] = useState<any[]>([])
+  const [compareLayoutedEdges, setCompareLayoutedEdges] = useState<any[]>([])
+  const [allCompareNodes, setAllCompareNodes] = useState<any[]>([])
+  const [allCompareEdges, setAllCompareEdges] = useState<any[]>([])
+
+  // Suppress unused warnings - will be used for compare graph node selection
+  void allCompareNodes
+  void allCompareEdges
+
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [overlayPosition, setOverlayPosition] = useState<{ x: number; y: number } | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [activeTab, setActiveTab] = useState<'all' | 'isd' | 'amdgpu' | 'regs' | null>(null)
+  const [compareActiveTab, setCompareActiveTab] = useState<'all' | 'isd' | 'amdgpu' | 'regs' | null>(null)
 
-  // Layout nodes/edges when data changes
+  // Compare graph selection state
+  const [compareSelectedNodeId, setCompareSelectedNodeId] = useState<string | null>(null)
+  const [compareOverlayPosition, setCompareOverlayPosition] = useState<{ x: number; y: number } | null>(null)
+  const [compareIsDragging, setCompareIsDragging] = useState(false)
+  const [compareDragOffset, setCompareDragOffset] = useState({ x: 0, y: 0 })
+
+  // Layout primary stage nodes/edges
   useEffect(() => {
-    console.log('🔄 New graph data received:', nodes.length, 'nodes,', edges.length, 'edges')
+    console.log('🔄 Primary graph data received:', nodes.length, 'nodes,', edges.length, 'edges')
 
     // Clear state
     setLayoutedNodes([])
@@ -35,12 +67,84 @@ export function SelectionDAGViewer({ nodes, edges, stage = 'isel' }: SelectionDA
 
     if (nodes.length > 0) {
       const { nodes: laidOutNodes, edges: laidOutEdges } = layoutDag(nodes, edges)
-      setAllNodes(laidOutNodes)
+
+      // Apply comparison highlighting if in compare mode
+      let highlightedNodes = laidOutNodes
+      if (comparison) {
+        highlightedNodes = laidOutNodes.map(node => {
+          const opcode = node.data?.opcode || ''
+
+          // Check if this operation will be REMOVED going from stage1→stage2
+          const willBeRemoved = comparison.added_opcodes?.includes(opcode)
+
+          if (willBeRemoved) {
+            // Red shadow for operations that will be removed
+            return {
+              ...node,
+              style: {
+                ...node.style,
+                border: '2px solid #ef4444',
+                boxShadow: '0 0 16px rgba(239, 68, 68, 0.8)',
+                backgroundColor: 'rgba(239, 68, 68, 0.15)'
+              }
+            }
+          }
+
+          return node
+        })
+      }
+
+      setAllNodes(highlightedNodes)
       setAllEdges(laidOutEdges)
-      setLayoutedNodes(laidOutNodes)
+      setLayoutedNodes(highlightedNodes)
       setLayoutedEdges(laidOutEdges)
     }
-  }, [nodes, edges])
+  }, [nodes, edges, comparison])
+
+  // Layout compare stage nodes/edges
+  useEffect(() => {
+    if (compareNodes.length > 0 && compareEdges.length > 0) {
+      console.log('🔄 Compare graph data received:', compareNodes.length, 'nodes,', compareEdges.length, 'edges')
+      const { nodes: laidOutNodes, edges: laidOutEdges } = layoutDag(compareNodes, compareEdges)
+
+      // Apply comparison highlighting
+      let highlightedNodes = laidOutNodes
+      if (comparison) {
+        highlightedNodes = laidOutNodes.map(node => {
+          const opcode = node.data?.opcode || ''
+
+          // Check if this operation was ADDED going from stage1→stage2
+          const wasAdded = comparison.removed_opcodes?.includes(opcode)
+
+          if (wasAdded) {
+            // Blue shadow for operations that were added
+            return {
+              ...node,
+              style: {
+                ...node.style,
+                border: '2px solid #3b82f6',
+                boxShadow: '0 0 16px rgba(59, 130, 246, 0.8)',
+                backgroundColor: 'rgba(59, 130, 246, 0.15)'
+              }
+            }
+          }
+
+          return node
+        })
+      }
+
+      setAllCompareNodes(highlightedNodes)
+      setAllCompareEdges(laidOutEdges)
+      setCompareLayoutedNodes(highlightedNodes)
+      setCompareLayoutedEdges(laidOutEdges)
+    } else {
+      // Clear compare state when not in compare mode
+      setAllCompareNodes([])
+      setAllCompareEdges([])
+      setCompareLayoutedNodes([])
+      setCompareLayoutedEdges([])
+    }
+  }, [compareNodes, compareEdges, comparison])
 
   // Node click handler
   const handleNodeClick = (event: any, node: any) => {
@@ -97,6 +201,55 @@ export function SelectionDAGViewer({ nodes, edges, stage = 'isel' }: SelectionDA
     setLayoutedNodes(allNodes.map((n) => ({ ...n, style: { ...n.style, opacity: 1 } })))
   }
 
+  // Compare graph node click handler
+  const handleCompareNodeClick = (event: any, node: any) => {
+    if (compareSelectedNodeId === node.id) {
+      // Deselect
+      setCompareSelectedNodeId(null)
+      setCompareOverlayPosition(null)
+      setCompareLayoutedEdges(allCompareEdges)
+      setCompareLayoutedNodes(allCompareNodes.map((n) => ({ ...n, style: { ...n.style, opacity: 1 } })))
+    } else {
+      // Select node
+      setCompareSelectedNodeId(node.id)
+
+      // Find connected edges
+      const connectedEdges = allCompareEdges.filter((edge) => edge.source === node.id || edge.target === node.id)
+
+      // Build set of connected node IDs
+      const connectedNodeIds = new Set<string>([node.id])
+      connectedEdges.forEach((edge) => {
+        connectedNodeIds.add(edge.source)
+        connectedNodeIds.add(edge.target)
+      })
+
+      // Dim unconnected nodes
+      setCompareLayoutedNodes(
+        allCompareNodes.map((n) => ({
+          ...n,
+          style: {
+            ...n.style,
+            opacity: connectedNodeIds.has(n.id) ? 1 : 0.2,
+          },
+        }))
+      )
+
+      // Show only connected edges
+      setCompareLayoutedEdges(connectedEdges)
+
+      // Position overlay near click
+      setCompareOverlayPosition({ x: event.clientX, y: event.clientY })
+    }
+  }
+
+  // Compare graph pane click handler
+  const handleComparePaneClick = () => {
+    setCompareSelectedNodeId(null)
+    setCompareOverlayPosition(null)
+    setCompareLayoutedEdges(allCompareEdges)
+    setCompareLayoutedNodes(allCompareNodes.map((n) => ({ ...n, style: { ...n.style, opacity: 1 } })))
+  }
+
   // Overlay drag handlers
   const handleOverlayMouseDown = (e: React.MouseEvent) => {
     if (overlayPosition) {
@@ -133,14 +286,40 @@ export function SelectionDAGViewer({ nodes, edges, stage = 'isel' }: SelectionDA
     }
   }, [isDragging, dragOffset])
 
+  // Compare overlay drag handlers
+  const handleCompareMouseMove = (e: MouseEvent) => {
+    if (compareIsDragging && compareOverlayPosition) {
+      setCompareOverlayPosition({
+        x: e.clientX - compareDragOffset.x,
+        y: e.clientY - compareDragOffset.y,
+      })
+    }
+  }
+
+  const handleCompareMouseUp = () => {
+    setCompareIsDragging(false)
+  }
+
+  // Add/remove compare drag listeners
+  useEffect(() => {
+    if (compareIsDragging) {
+      window.addEventListener('mousemove', handleCompareMouseMove)
+      window.addEventListener('mouseup', handleCompareMouseUp)
+      return () => {
+        window.removeEventListener('mousemove', handleCompareMouseMove)
+        window.removeEventListener('mouseup', handleCompareMouseUp)
+      }
+    }
+  }, [compareIsDragging, compareDragOffset])
+
   // Get selected node and its connections
   const selectedNode = selectedNodeId ? allNodes.find((n) => n.id === selectedNodeId) : null
   const inputs = selectedNodeId ? allEdges.filter((e) => e.target === selectedNodeId) : []
   const outputs = selectedNodeId ? allEdges.filter((e) => e.source === selectedNodeId) : []
 
-  // Calculate graph statistics
-  const calculateStats = () => {
-    if (nodes.length === 0) return null
+  // Helper: Calculate graph statistics for any node set
+  const calculateStats = (nodeSet: any[], edgeSet: any[]) => {
+    if (nodeSet.length === 0) return null
 
     // Count AMDGPU-specific vs generic ISD nodes
     let amdgpuCount = 0
@@ -175,8 +354,8 @@ export function SelectionDAGViewer({ nodes, edges, stage = 'isel' }: SelectionDA
     })
 
     return {
-      nodeCount: nodes.length,
-      edgeCount: edges.length,
+      nodeCount: nodeSet.length,
+      edgeCount: edgeSet.length,
       amdgpuCount,
       isdCount,
       physicalCount: physicalRegs.size,
@@ -184,11 +363,13 @@ export function SelectionDAGViewer({ nodes, edges, stage = 'isel' }: SelectionDA
     }
   }
 
-  const stats = calculateStats()
+  const stats = calculateStats(nodes, edges)
+  const compareStats = calculateStats(compareNodes, compareEdges)
+  void compareStats // Future: display stats for compare graph
 
-  // Get nodes for each category (only operation nodes, not metadata)
-  const getNodesByCategory = (category: 'isd' | 'amdgpu' | 'regs') => {
-    return nodes.filter(node => {
+  // Helper: Get nodes by category for any node set
+  const getNodesByCategory = (nodeSet: any[], category: 'isd' | 'amdgpu' | 'regs') => {
+    return nodeSet.filter(node => {
       const opcode = node.data?.opcode || node.data?.label || ''
 
       // Skip non-operation nodes (Register, Constant, EntryToken, etc.)
@@ -214,12 +395,12 @@ export function SelectionDAGViewer({ nodes, edges, stage = 'isel' }: SelectionDA
     })
   }
 
-  // Extract register list from nodes
-  const getRegisterList = () => {
+  // Helper: Extract register list from any node set
+  const getRegisterList = (nodeSet: any[]) => {
     const physicalRegs = new Set<string>()
     const virtualRegs = new Set<string>()
 
-    nodes.forEach(node => {
+    nodeSet.forEach(node => {
       const nodeText = JSON.stringify(node.data)
 
       // Physical registers: $vgpr, $sgpr
@@ -242,9 +423,44 @@ export function SelectionDAGViewer({ nodes, edges, stage = 'isel' }: SelectionDA
   }
 
   return (
-    <div style={{ height: '100%', width: '100%', backgroundColor: '#0a0a0a', position: 'relative' }}>
-      {/* Floating Info Tabs - Top Left */}
-      <div style={{ position: 'absolute', top: '12px', left: '12px', zIndex: 10 }}>
+    <div style={{
+      height: '100%',
+      width: '100%',
+      backgroundColor: '#0a0a0a',
+      position: 'relative',
+      display: 'flex',
+      flexDirection: 'row'
+    }}>
+      {/* Left Graph - Primary Stage */}
+      <div style={{
+        width: isCompareMode ? '50%' : '100%',
+        height: '100%',
+        position: 'relative',
+        borderRight: isCompareMode ? '1px solid #1a1a1a' : 'none'
+      }}>
+        {/* Stage Label */}
+        {isCompareMode && (
+          <div style={{
+            position: 'absolute',
+            top: '12px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 10,
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            border: '1px solid rgba(239, 68, 68, 0.5)',
+            borderRadius: '3px',
+            padding: '4px 12px',
+            fontFamily: 'JetBrains Mono, monospace',
+            fontSize: '11px',
+            color: '#f87171',
+            fontWeight: 'bold'
+          }}>
+            {comparison?.stage1_name || stage} (red = removed)
+          </div>
+        )}
+
+        {/* Floating Info Tabs - Top Left */}
+        <div style={{ position: 'absolute', top: '12px', left: '12px', zIndex: 10 }}>
         <div
           style={{
             backgroundColor: 'rgba(0, 0, 0, 0.6)',
@@ -300,8 +516,8 @@ export function SelectionDAGViewer({ nodes, edges, stage = 'isel' }: SelectionDA
               border: '1px solid rgba(24, 160, 24, 0.4)',
               borderRadius: '3px',
               padding: '6px 8px',
-              maxWidth: '300px',
-              maxHeight: '400px',
+              maxWidth: '200px',
+              maxHeight: '250px',
               overflowY: 'auto',
               fontFamily: 'JetBrains Mono, monospace',
               fontSize: '10px',
@@ -311,7 +527,7 @@ export function SelectionDAGViewer({ nodes, edges, stage = 'isel' }: SelectionDA
           >
             {activeTab === 'isd' && (() => {
               const opcodes = Array.from(new Set(
-                getNodesByCategory('isd').map(node => node.data?.opcode || node.data?.label || node.id)
+                getNodesByCategory(nodes, 'isd').map(node => node.data?.opcode || node.data?.label || node.id)
               )).sort()
               return (
                 <div>
@@ -328,7 +544,7 @@ export function SelectionDAGViewer({ nodes, edges, stage = 'isel' }: SelectionDA
             })()}
             {activeTab === 'amdgpu' && (() => {
               const opcodes = Array.from(new Set(
-                getNodesByCategory('amdgpu').map(node => node.data?.opcode || node.data?.label || node.id)
+                getNodesByCategory(nodes, 'amdgpu').map(node => node.data?.opcode || node.data?.label || node.id)
               )).sort()
               return (
                 <div>
@@ -344,7 +560,7 @@ export function SelectionDAGViewer({ nodes, edges, stage = 'isel' }: SelectionDA
               )
             })()}
             {activeTab === 'regs' && (() => {
-              const regs = getRegisterList()
+              const regs = getRegisterList(nodes)
               return (
                 <div>
                   <div style={{ color: '#18a018', fontWeight: 'bold', marginBottom: '4px' }}>
@@ -370,29 +586,29 @@ export function SelectionDAGViewer({ nodes, edges, stage = 'isel' }: SelectionDA
         )}
       </div>
 
-      <GraphCanvas
-        nodes={layoutedNodes}
-        edges={layoutedEdges}
-        onNodeClick={handleNodeClick}
-        onEdgeClick={handleEdgeClick}
-        onPaneClick={handlePaneClick}
-      />
-
-      {/* Floating Node Details Panel */}
-      {selectedNode && overlayPosition && (
-        <NodeDetailsPanel
-          node={selectedNode}
-          inputs={inputs}
-          outputs={outputs}
-          allNodes={allNodes}
-          position={overlayPosition}
-          isDragging={isDragging}
-          onMouseDown={handleOverlayMouseDown}
+        <GraphCanvas
+          nodes={layoutedNodes}
+          edges={layoutedEdges}
+          onNodeClick={handleNodeClick}
+          onEdgeClick={handleEdgeClick}
+          onPaneClick={handlePaneClick}
         />
-      )}
 
-      {/* Floating Graph Stats Overlay - Bottom Right */}
-      {stats && (
+        {/* Floating Node Details Panel */}
+        {selectedNode && overlayPosition && (
+          <NodeDetailsPanel
+            node={selectedNode}
+            inputs={inputs}
+            outputs={outputs}
+            allNodes={allNodes}
+            position={overlayPosition}
+            isDragging={isDragging}
+            onMouseDown={handleOverlayMouseDown}
+          />
+        )}
+
+        {/* Floating Graph Stats Overlay - Bottom Right (only when NOT comparing) */}
+        {stats && !isCompareMode && (
         <div
           style={{
             position: 'absolute',
@@ -422,6 +638,271 @@ export function SelectionDAGViewer({ nodes, edges, stage = 'isel' }: SelectionDA
           <div>
             vgpr: {stats.physicalCount} | virt: {stats.virtualCount}
           </div>
+        </div>
+        )}
+      </div>
+
+      {/* Right Graph - Compare Stage (only shown in compare mode) */}
+      {isCompareMode && (
+        <div style={{ width: '50%', height: '100%', position: 'relative' }}>
+          {/* Stage Label */}
+          <div style={{
+            position: 'absolute',
+            top: '12px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 10,
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            border: '1px solid rgba(59, 130, 246, 0.5)',
+            borderRadius: '3px',
+            padding: '4px 12px',
+            fontFamily: 'JetBrains Mono, monospace',
+            fontSize: '11px',
+            color: '#60a5fa',
+            fontWeight: 'bold'
+          }}>
+            {comparison?.stage2_name || 'compare'} (blue = added)
+          </div>
+
+          {/* Floating Info Tabs - Top Left (Compare Graph) */}
+          <div style={{ position: 'absolute', top: '12px', left: '12px', zIndex: 10 }}>
+            <div style={{
+              backgroundColor: 'rgba(0, 0, 0, 0.6)',
+              border: '1px solid rgba(24, 160, 24, 0.3)',
+              borderRadius: '3px',
+              padding: '2px 4px',
+              display: 'flex',
+              gap: '4px',
+              fontFamily: 'JetBrains Mono, monospace',
+              fontSize: '10px'
+            }}>
+              {(['all', 'isd', 'amdgpu', 'regs'] as const).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setCompareActiveTab(compareActiveTab === tab ? null : tab)}
+                  style={{
+                    background: compareActiveTab === tab ? 'rgba(24, 160, 24, 0.2)' : 'transparent',
+                    color: compareActiveTab === tab ? '#18a018' : '#909090',
+                    border: compareActiveTab === tab ? '1px solid #18a018' : '1px solid transparent',
+                    borderRadius: '2px',
+                    padding: '3px 6px',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    fontSize: 'inherit',
+                    fontWeight: compareActiveTab === tab ? 'bold' : 'normal',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (compareActiveTab !== tab) {
+                      e.currentTarget.style.color = '#c8c8c8'
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (compareActiveTab !== tab) {
+                      e.currentTarget.style.color = '#909090'
+                    }
+                  }}
+                >
+                  {tab === 'all' ? 'All' :
+                   tab === 'isd' ? 'ISD' :
+                   tab === 'amdgpu' ? 'AMD' : 'Reg'}
+                </button>
+              ))}
+            </div>
+
+            {/* Info Panel for Compare Graph */}
+            {compareActiveTab && compareActiveTab !== 'all' && (
+              <div style={{
+                marginTop: '4px',
+                backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                border: '1px solid rgba(24, 160, 24, 0.4)',
+                borderRadius: '3px',
+                padding: '6px 8px',
+                maxWidth: '200px',
+                maxHeight: '250px',
+                overflowY: 'auto',
+                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: '10px',
+                lineHeight: '1.4',
+                color: '#c8c8c8'
+              }}>
+                {compareActiveTab === 'isd' && (() => {
+                  const opcodes = Array.from(new Set(
+                    getNodesByCategory(compareNodes, 'isd').map(node => node.data?.opcode || node.data?.label || node.id)
+                  )).sort()
+                  return (
+                    <div>
+                      <div style={{ color: '#18a018', fontWeight: 'bold', marginBottom: '4px' }}>
+                        ISD Operations ({opcodes.length})
+                      </div>
+                      {opcodes.map((opcode, idx) => (
+                        <div key={idx} style={{ padding: '2px 0', borderBottom: '1px solid #1a1a1a' }}>
+                          {opcode}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+                {compareActiveTab === 'amdgpu' && (() => {
+                  const opcodes = Array.from(new Set(
+                    getNodesByCategory(compareNodes, 'amdgpu').map(node => node.data?.opcode || node.data?.label || node.id)
+                  )).sort()
+                  return (
+                    <div>
+                      <div style={{ color: '#18a018', fontWeight: 'bold', marginBottom: '4px' }}>
+                        AMDGPU Operations ({opcodes.length})
+                      </div>
+                      {opcodes.map((opcode, idx) => (
+                        <div key={idx} style={{ padding: '2px 0', borderBottom: '1px solid #1a1a1a' }}>
+                          {opcode}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+                {compareActiveTab === 'regs' && (() => {
+                  const regs = getRegisterList(compareNodes)
+                  return (
+                    <div>
+                      <div style={{ color: '#18a018', fontWeight: 'bold', marginBottom: '4px' }}>
+                        Physical Registers ({regs.physical.length})
+                      </div>
+                      {regs.physical.map((reg, idx) => (
+                        <div key={idx} style={{ padding: '2px 0', borderBottom: '1px solid #1a1a1a' }}>
+                          {reg}
+                        </div>
+                      ))}
+                      <div style={{ color: '#18a018', fontWeight: 'bold', marginTop: '8px', marginBottom: '4px' }}>
+                        Virtual Registers ({regs.virtual.length})
+                      </div>
+                      {regs.virtual.map((reg, idx) => (
+                        <div key={idx} style={{ padding: '2px 0', borderBottom: '1px solid #1a1a1a' }}>
+                          {reg}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
+          </div>
+
+          <GraphCanvas
+            nodes={compareLayoutedNodes}
+            edges={compareLayoutedEdges}
+            onNodeClick={handleCompareNodeClick}
+            onEdgeClick={() => {}}
+            onPaneClick={handleComparePaneClick}
+          />
+
+          {/* Node Details Panel for Compare Graph */}
+          {compareSelectedNodeId && compareOverlayPosition && (() => {
+            const selectedNode = allCompareNodes.find((n) => n.id === compareSelectedNodeId)
+            const inputs = allCompareEdges.filter((e) => e.target === compareSelectedNodeId)
+            const outputs = allCompareEdges.filter((e) => e.source === compareSelectedNodeId)
+
+            return selectedNode ? (
+              <NodeDetailsPanel
+                node={selectedNode}
+                inputs={inputs}
+                outputs={outputs}
+                allNodes={allCompareNodes}
+                position={compareOverlayPosition}
+                isDragging={compareIsDragging}
+                onMouseDown={(e: React.MouseEvent) => {
+                  if (compareOverlayPosition) {
+                    setCompareIsDragging(true)
+                    setCompareDragOffset({
+                      x: e.clientX - compareOverlayPosition.x,
+                      y: e.clientY - compareOverlayPosition.y,
+                    })
+                  }
+                }}
+              />
+            ) : null
+          })()}
+        </div>
+      )}
+
+      {/* Comparison Panel - Bottom Right (only shown in compare mode) */}
+      {isCompareMode && comparison && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '16px',
+            right: '16px',
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            border: '1px solid rgba(24, 160, 24, 0.4)',
+            borderRadius: '4px',
+            padding: '12px 16px',
+            fontFamily: 'JetBrains Mono, monospace',
+            fontSize: '11px',
+            lineHeight: '1.6',
+            color: '#c8c8c8',
+            maxWidth: '400px',
+            maxHeight: '500px',
+            overflowY: 'auto'
+          }}
+        >
+          <div style={{ color: '#18a018', fontWeight: 'bold', marginBottom: '8px', fontSize: '12px' }}>
+            Comparison: {comparison.stage1_name} vs {comparison.stage2_name}
+          </div>
+
+          {/* Stage Stats */}
+          <div style={{ marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid #1a1a1a' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+              <span>{comparison.stage1_name}:</span>
+              <span>{comparison.stage1_nodes} nodes, {comparison.stage1_edges} edges</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>{comparison.stage2_name}:</span>
+              <span>{comparison.stage2_nodes} nodes, {comparison.stage2_edges} edges</span>
+            </div>
+            <div style={{ marginTop: '4px', color: comparison.node_count_change >= 0 ? '#18a018' : '#ef4444' }}>
+              Change: {comparison.node_count_change >= 0 ? '+' : ''}{comparison.node_count_change} nodes,
+              {' '}{comparison.edge_count_change >= 0 ? '+' : ''}{comparison.edge_count_change} edges
+            </div>
+          </div>
+
+          {/* Removed Operations */}
+          {comparison.added_opcodes && comparison.added_opcodes.length > 0 && (
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{ color: '#f87171', fontWeight: 'bold', marginBottom: '4px' }}>
+                ✗ Removed in {comparison.stage1_name} ({comparison.added_opcodes.length})
+              </div>
+              <div style={{ paddingLeft: '8px', maxHeight: '150px', overflowY: 'auto' }}>
+                {comparison.added_opcodes.map((op: string, idx: number) => (
+                  <div key={idx} style={{ padding: '2px 0', color: '#f87171', fontSize: '10px' }}>
+                    - {op}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Added Operations */}
+          {comparison.removed_opcodes && comparison.removed_opcodes.length > 0 && (
+            <div>
+              <div style={{ color: '#60a5fa', fontWeight: 'bold', marginBottom: '4px' }}>
+                ✓ Added in {comparison.stage2_name} ({comparison.removed_opcodes.length})
+              </div>
+              <div style={{ paddingLeft: '8px', maxHeight: '150px', overflowY: 'auto' }}>
+                {comparison.removed_opcodes.map((op: string, idx: number) => (
+                  <div key={idx} style={{ padding: '2px 0', color: '#60a5fa', fontSize: '10px' }}>
+                    + {op}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* No Changes */}
+          {(!comparison.added_opcodes || comparison.added_opcodes.length === 0) &&
+           (!comparison.removed_opcodes || comparison.removed_opcodes.length === 0) && (
+            <div style={{ color: '#909090', fontStyle: 'italic' }}>
+              No operation changes detected
+            </div>
+          )}
         </div>
       )}
     </div>

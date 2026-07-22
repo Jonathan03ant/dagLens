@@ -47,11 +47,11 @@ export function CodeEditor({ value, onChange }: CodeEditorProps) {
   return (
     <div className="h-full flex flex-col bg-[#000000]">
       {/* Editor Header */}
-      <div style={{ padding: '16px 20px', borderBottom: '1px solid #1a1a1a' }}>
+      <div style={{ padding: '10px 16px', borderBottom: '1px solid #1a1a1a' }}>
         <h2 style={{
           color: '#18a018',
           margin: 0,
-          fontSize: '14px',
+          fontSize: '12px',
           fontWeight: '600',
           fontFamily: 'JetBrains Mono, monospace'
         }}>

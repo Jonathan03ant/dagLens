@@ -11,6 +11,10 @@ interface FooterProps {
   onCpuChange: (cpu: string) => void
   stage: string
   onStageChange: (stage: string) => void
+  compareEnabled: boolean
+  onCompareEnabledChange: (enabled: boolean) => void
+  compareStage: string
+  onCompareStageChange: (stage: string) => void
   onRun: () => void
   isLoading: boolean
 }
@@ -34,6 +38,10 @@ export function Footer({
   onCpuChange,
   stage,
   onStageChange,
+  compareEnabled,
+  onCompareEnabledChange,
+  compareStage,
+  onCompareStageChange,
   onRun,
   isLoading
 }: FooterProps) {
@@ -81,6 +89,24 @@ export function Footer({
         <div className="flex items-center gap-2">
           <span className="text-[#909090]">Stage:</span>
           <CustomSelect value={stage} options={DAG_STAGES} onChange={onStageChange} />
+        </div>
+        <div className="w-px h-4 bg-[#1a1a1a]"></div>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={compareEnabled}
+              onChange={(e) => onCompareEnabledChange(e.target.checked)}
+              className="w-3.5 h-3.5 cursor-pointer accent-[#18a018]"
+            />
+            <span className="text-[#909090]">Compare</span>
+          </label>
+          {compareEnabled && (
+            <>
+              <span className="text-[#909090]">vs</span>
+              <CustomSelect value={compareStage} options={DAG_STAGES} onChange={onCompareStageChange} />
+            </>
+          )}
         </div>
       </div>
 
